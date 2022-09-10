@@ -64,6 +64,7 @@ W = 512 # image width
 F = 8 # downsampling factor
 DDIM_STEPS = 50
 DDIM_ETA = 0.0
+SEED = 42
 
 def savePNG(img : Image) -> bytes:
     with io.BytesIO() as output:
@@ -111,8 +112,9 @@ def setup_sd_runtime():
     global MODEL
     global SAMPLER
     global WM_ENCODER
+    global SEED
     # seed
-    seed_everything(opt.seed)
+    seed_everything(SEED)
 
     # load model
     config = OmegaConf.load(CONFIG_PATH)
@@ -206,11 +208,11 @@ def stripAES(paddedData : bytes) -> bytes:
 
 def encrypt(data : bytes) -> bytes:
     paddedData = padAES(data)
-    aes = AES.new(SECRET_KEY)
+    aes = AES.new(SECRET_KEY, AES.MODE_ECB)
     return aes.encrypt(paddedData)
 
 def decrypt(data : bytes) -> bytes:
-    aes = AES.new(SECRET_KEY)
+    aes = AES.new(SECRET_KEY, AES.MODE_ECB)
     return stripAES(aes.decrypt(data))
     
 
@@ -288,8 +290,9 @@ def handle_handshakeRequest(request):
     return {'response': j['challenge']}
 
 def handle_dreamPromptRequest(request):
-    results = diffuse(request['prompt'])
-    return {'prompt': request['prompt'], 'results': results}
+    j = json.loads(request)
+    results = diffuse(j['prompt'])
+    return {'prompt': j['prompt'], 'results': results}
 
 def handle_dreamImageRequest(request):
     return request
