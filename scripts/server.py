@@ -276,7 +276,9 @@ def waitForRequest():
     requestLen = struct.unpack('<I', readbytes(4))[0]
     print(requestLen)
     print("waiting for request body")
-    encdata = readbytes(requestLen)
+    encdata = b''
+    while len(encdata) < requestLen:
+        encdata += readbytes(requestLen - len(encdata))
     print(f"read: {encdata}")
     request = decrypt(encdata)
     print(f"decrypted {request}")
@@ -324,6 +326,7 @@ def sendResponse(response):
 
     enc_response = encrypt(json.dumps(response).encode('utf-8'))
     print(hexlify(enc_response))
+    print(len(enc_response))
     CONNECTION.send(struct.pack('<I', len(enc_response)))
     CONNECTION.send(enc_response)
 
