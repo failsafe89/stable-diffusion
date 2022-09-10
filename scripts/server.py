@@ -189,7 +189,7 @@ def diffuse(prompt):
 
                 toc = time.time()
 
-    print(f"Your samples are ready and waiting for you here: \n{outpath} \n"
+    print(f"Your samples are ready\n"
           f" \nEnjoy.")
     return results
 
