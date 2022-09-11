@@ -201,7 +201,7 @@ def padAES(data : bytes) -> bytes:
     return data + (paddingChar * paddingLength)
 
 def stripAES(paddedData : bytes) -> bytes:
-    paddingLength = struct.unpack('<B', paddedData[-2:-1])[0]
+    paddingLength = struct.unpack('<B', paddedData[-1:])[0]
     if paddingLength > 16:
         raise Exception("Invalid padding")
     return paddedData[:-paddingLength]
