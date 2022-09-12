@@ -54,13 +54,13 @@ SAMPLER = None
 WM_ENCODER = None
 
 # Options
-BATCH_SIZE = 3
+BATCH_SIZE = 2
 PRECISION_SCOPE = autocast
 N_ITER = 2
 SCALE = 7.5
 C = 4 # latent channels
-H = 512 # image height
-W = 512 # image width
+H = 256 # image height
+W = 256 # image width
 F = 8 # downsampling factor
 DDIM_STEPS = 50
 DDIM_ETA = 0.0
