@@ -132,7 +132,7 @@ def setup_sd_runtime():
     WM_ENCODER = WatermarkEncoder()
     WM_ENCODER.set_watermark('bytes', wm.encode('utf-8'))
 
-def diffuse(prompt):
+def diffuse(prompt, options):
     global MODEL
     global SAMPLER
     global WM_ENCODER
@@ -145,7 +145,14 @@ def diffuse(prompt):
     global F
     global DDIM_STEPS
     global DDIM_ETA
-    data = [BATCH_SIZE * [prompt]]
+
+    batch = BATCH_SIZE if 'batchSize' not in options else options['batchSize']
+    n_iter = N_ITER if 'nIter' not in options else options['nIter']
+    width = W if 'width' not in options else options['width']
+    height = H if 'height' not in options else options['height']
+    ddim_steps = DDIM_STEPS if 'steps' not in options else options['steps']
+
+    data = [batch * [prompt]]
 
     results = []
 
@@ -154,18 +161,18 @@ def diffuse(prompt):
             with MODEL.ema_scope():
                 tic = time.time()
                 all_samples = list()
-                for n in trange(N_ITER, desc="Sampling"):
+                for n in trange(n_iter, desc="Sampling"):
                     for prompts in tqdm(data, desc="data"):
                         uc = None
                         if SCALE != 1.0:
-                            uc = MODEL.get_learned_conditioning(BATCH_SIZE * [""])
+                            uc = MODEL.get_learned_conditioning(batch * [""])
                         if isinstance(prompts, tuple):
                             prompts = list(prompts)
                         c = MODEL.get_learned_conditioning(prompts)
-                        shape = [C, H // F, W // F]
-                        samples_ddim, _ = SAMPLER.sample(S=DDIM_STEPS,
+                        shape = [C, height // F, width // F]
+                        samples_ddim, _ = SAMPLER.sample(S=ddim_steps,
                                                          conditioning=c,
-                                                         batch_size=BATCH_SIZE,
+                                                         batch_size=batch,
                                                          shape=shape,
                                                          verbose=False,
                                                          unconditional_guidance_scale=SCALE,
@@ -293,7 +300,7 @@ def handle_handshakeRequest(request):
 
 def handle_dreamPromptRequest(request):
     j = json.loads(request)
-    results = diffuse(j['prompt'])
+    results = diffuse(j['prompt'], j['options'])
     return {'prompt': j['prompt'], 'results': results}
 
 def handle_dreamImageRequest(request):
