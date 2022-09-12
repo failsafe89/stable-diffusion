@@ -229,6 +229,11 @@ def shutdown():
 
     print("shutting down cleanly")
 
+    if CONNECTION is not None:
+        CONNECTION.shutdown()
+        CONNECTION.close()
+        CONNECTION = None
+
     if SOCKET is not None:
         # SOCKET.shutdown()
         SOCKET.close()
