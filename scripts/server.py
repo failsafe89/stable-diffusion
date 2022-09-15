@@ -357,4 +357,9 @@ if __name__ == '__main__':
             sendResponse(handleRequest(waitForRequest()))
         except CONNECTION_TERMINATED as ct:
             print("Connection terminated")
+            CONNECTION.close()
+            CONNECTION = None
+            SOCKET.shutdown()
+            SOCKET.close()
+            SOCKET = None
             pass
