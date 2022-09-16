@@ -52,7 +52,8 @@ CONFIG_PATH = "configs/stable-diffusion/v1-inference.yaml"
 MODEL_PATH = "models/ldm/stable-diffusion-v1/model.ckpt"
 MODEL = None
 DEVICE = None
-SAMPLER = None
+PLMS_SAMPLER = None
+DDIM_SAMPLER = None
 WM_ENCODER = None
 
 # Options
@@ -114,7 +115,8 @@ def put_watermark(img, wm_encoder=None):
 def setup_sd_runtime():
     global MODEL
     global DEVICE
-    global SAMPLER
+    global PLMS_SAMPLER
+    global DDIM_SAMPLER
     global WM_ENCODER
     global SEED
     # seed
@@ -127,8 +129,8 @@ def setup_sd_runtime():
     MODEL = MODEL.to(DEVICE)
 
     # setup sampler
-    SAMPLER = PLMSSampler(MODEL)
-    #SAMPLER = DDIMSampler(model)
+    PLMS_SAMPLER = PLMSSampler(MODEL)
+    DDIM_SAMPLER = DDIMSampler(MODEL)
 
     # setup watermark
     print("Creating invisible watermark encoder (see https://github.com/ShieldMnt/invisible-watermark)...")
@@ -139,7 +141,7 @@ def setup_sd_runtime():
 def diffuse(prompt, options, inputImageURI=None):
     global MODEL
     global DEVICE
-    global SAMPLER
+    global PLMS_SAMPLER
     global WM_ENCODER
     global N_ITER
     global SCALE
@@ -175,7 +177,7 @@ def diffuse(prompt, options, inputImageURI=None):
                             prompts = list(prompts)
                         c = MODEL.get_learned_conditioning(prompts)
                         shape = [C, height // F, width // F]
-                        samples_ddim, _ = SAMPLER.sample(S=ddim_steps,
+                        samples_ddim, _ = PLMS_SAMPLER.sample(S=ddim_steps,
                                                          conditioning=c,
                                                          batch_size=batch,
                                                          shape=shape,
@@ -230,7 +232,7 @@ def load_img(imageURI):
 def diffuseFromImage(prompt, inputImageURI, options):
     global MODEL
     global DEVICE
-    global SAMPLER
+    global DDIM_SAMPLER
     global WM_ENCODER
     global N_ITER
     global SCALE
@@ -257,7 +259,7 @@ def diffuseFromImage(prompt, inputImageURI, options):
     init_image = repeat(init_image, '1 ... -> b ...', b=batch)
     img_latent = MODEL.get_first_stage_encoding(MODEL.encode_first_stage(init_image))  # move to latent space
 
-    SAMPLER.make_schedule(ddim_num_steps=ddim_steps, ddim_eta=DDIM_ETA, verbose=False)
+    DDIM_SAMPLER.make_schedule(ddim_num_steps=ddim_steps, ddim_eta=DDIM_ETA, verbose=False)
 
     assert 0. <= strength <= 1., 'can only work with strength in [0.0, 1.0]'
     t_enc = int(strength * ddim_steps)
@@ -280,9 +282,9 @@ def diffuseFromImage(prompt, inputImageURI, options):
                         c = MODEL.get_learned_conditioning(prompts)
 
                         # encode (scaled latent)
-                        z_enc = SAMPLER.stochastic_encode(img_latent, torch.tensor([t_enc]*batch).to(DEVICE))
+                        z_enc = DDIM_SAMPLER.stochastic_encode(img_latent, torch.tensor([t_enc]*batch).to(DEVICE))
                         # decode it
-                        samples = SAMPLER.decode(z_enc, c, t_enc, unconditional_guidance_scale=SCALE,
+                        samples = DDIM_SAMPLER.decode(z_enc, c, t_enc, unconditional_guidance_scale=SCALE,
                                                  unconditional_conditioning=uc,)
 
                         x_samples = MODEL.decode_first_stage(samples)
