@@ -254,6 +254,7 @@ def diffuseFromImage(prompt, inputImageURI, options):
     init_image = load_img(inputImageURI).to(DEVICE)
     init_image = repeat(init_image, '1 ... -> b ...', b=batch)
     img_latent = MODEL.get_first_stage_encoding(MODEL.encode_first_stage(init_image))  # move to latent space
+    init_image.close()
 
     SAMPLER.make_schedule(ddim_num_steps=ddim_steps, ddim_eta=DDIM_ETA, verbose=False)
 
