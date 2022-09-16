@@ -221,10 +221,11 @@ def load_img(imageURI):
     print(f"loaded input image of size ({w}, {h}) from URI")
     w, h = map(lambda x: x - x % 32, (w, h))  # resize to integer multiple of 32
     image = image.resize((w, h), resample=PIL.Image.LANCZOS)
-    image = np.array(image).astype(np.float32) / 255.0
-    image = image[None].transpose(0, 3, 1, 2)
-    image = torch.from_numpy(image)
-    return 2.*image - 1.
+    image_np = np.array(image).astype(np.float32) / 255.0
+    image.close()
+    image_np = image_np[None].transpose(0, 3, 1, 2)
+    image_np = torch.from_numpy(image_np)
+    return 2.*image_np - 1.
 
 def diffuseFromImage(prompt, inputImageURI, options):
     global MODEL
@@ -255,7 +256,6 @@ def diffuseFromImage(prompt, inputImageURI, options):
     init_image = load_img(inputImageURI).to(DEVICE)
     init_image = repeat(init_image, '1 ... -> b ...', b=batch)
     img_latent = MODEL.get_first_stage_encoding(MODEL.encode_first_stage(init_image))  # move to latent space
-    init_image.close()
 
     SAMPLER.make_schedule(ddim_num_steps=ddim_steps, ddim_eta=DDIM_ETA, verbose=False)
 
