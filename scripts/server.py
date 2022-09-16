@@ -216,6 +216,7 @@ def load_img(imageURI):
     
     b64data = imageURI.split("data:image/png;base64,")[-1].encode('utf-8')
     image = loadPNG(b64data)
+    image = image.convert('RGB')
     w, h = image.size
     print(f"loaded input image of size ({w}, {h}) from URI")
     w, h = map(lambda x: x - x % 32, (w, h))  # resize to integer multiple of 32
