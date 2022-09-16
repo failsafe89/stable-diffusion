@@ -16,8 +16,9 @@ import cv2
 import torch
 import base64
 import numpy as np
+import PIL
 from PIL import Image
-from einops import rearrange
+from einops import rearrange, repeat
 import time
 from pytorch_lightning import seed_everything
 from torch import autocast
@@ -50,6 +51,7 @@ class CONNECTION_TERMINATED(Exception):
 CONFIG_PATH = "configs/stable-diffusion/v1-inference.yaml"
 MODEL_PATH = "models/ldm/stable-diffusion-v1/model.ckpt"
 MODEL = None
+DEVICE = None
 SAMPLER = None
 WM_ENCODER = None
 
@@ -65,6 +67,7 @@ F = 8 # downsampling factor
 DDIM_STEPS = 50
 DDIM_ETA = 0.0
 SEED = 42
+STRENGTH = 0.75
 
 def savePNG(img : Image) -> bytes:
     with io.BytesIO() as output:
@@ -110,6 +113,7 @@ def put_watermark(img, wm_encoder=None):
 
 def setup_sd_runtime():
     global MODEL
+    global DEVICE
     global SAMPLER
     global WM_ENCODER
     global SEED
@@ -119,8 +123,8 @@ def setup_sd_runtime():
     # load model
     config = OmegaConf.load(CONFIG_PATH)
     MODEL = load_model_from_config(config, MODEL_PATH)
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    MODEL = MODEL.to(device)
+    DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    MODEL = MODEL.to(DEVICE)
 
     # setup sampler
     SAMPLER = PLMSSampler(MODEL)
@@ -132,8 +136,9 @@ def setup_sd_runtime():
     WM_ENCODER = WatermarkEncoder()
     WM_ENCODER.set_watermark('bytes', wm.encode('utf-8'))
 
-def diffuse(prompt, options):
+def diffuse(prompt, options, inputImageURI=None):
     global MODEL
+    global DEVICE
     global SAMPLER
     global WM_ENCODER
     global N_ITER
@@ -199,6 +204,103 @@ def diffuse(prompt, options):
     print(f"Your samples are ready\n"
           f" \nEnjoy.")
     return results
+
+
+#    ## image2image
+def loadPNG(b64data : bytes) -> Image:
+    with io.BytesIO(initial_bytes=base64.decodebytes(b64data)) as input:
+        return Image.open(input)
+
+def load_img(imageURI):
+    if not imageURI.startswith("data:image/png;base64,"):
+        raise Exception("invalid image URI data")
+    
+    b64data = imageURI.split("data:image/png;base64,")[-1].encode('utf-8')
+    image = loadPNG(b64data)
+    w, h = image.size
+    print(f"loaded input image of size ({w}, {h}) from URI")
+    w, h = map(lambda x: x - x % 32, (w, h))  # resize to integer multiple of 32
+    image = image.resize((w, h), resample=PIL.Image.LANCZOS)
+    image = np.array(image).astype(np.float32) / 255.0
+    image = image[None].transpose(0, 3, 1, 2)
+    image = torch.from_numpy(image)
+    return 2.*image - 1.
+
+def diffuseFromImage(prompt, inputImageURI, options):
+    global MODEL
+    global DEVICE
+    global SAMPLER
+    global WM_ENCODER
+    global N_ITER
+    global SCALE
+    global BATCH_SIZE
+    global C
+    global H
+    global W
+    global F
+    global DDIM_STEPS
+    global DDIM_ETA
+    global STRENGTH
+
+    batch = BATCH_SIZE if 'batchSize' not in options else options['batchSize']
+    n_iter = N_ITER if 'nIter' not in options else options['nIter']
+    width = W if 'width' not in options else options['width']
+    height = H if 'height' not in options else options['height']
+    ddim_steps = DDIM_STEPS if 'steps' not in options else options['steps']
+    strength = STRENGTH if 'strength' not in options else options['strength']
+
+    data = [batch * [prompt]]
+
+    # use input image
+    init_image = load_img(inputImageURI).to(DEVICE)
+    init_image = repeat(init_image, '1 ... -> b ...', b=batch)
+    img_latent = MODEL.get_first_stage_encoding(MODEL.encode_first_stage(init_image))  # move to latent space
+
+    SAMPLER.make_schedule(ddim_num_steps=ddim_steps, ddim_eta=DDIM_ETA, verbose=False)
+
+    assert 0. <= strength <= 1., 'can only work with strength in [0.0, 1.0]'
+    t_enc = int(strength * ddim_steps)
+    print(f"target t_enc is {t_enc} steps")
+
+    results = []
+
+    with torch.no_grad():
+        with PRECISION_SCOPE("cuda"):
+            with MODEL.ema_scope():
+                tic = time.time()
+                all_samples = list()
+                for n in trange(n_iter, desc="Sampling"):
+                    for prompts in tqdm(data, desc="data"):
+                        uc = None
+                        if SCALE != 1.0:
+                            uc = MODEL.get_learned_conditioning(batch * [""])
+                        if isinstance(prompts, tuple):
+                            prompts = list(prompts)
+                        c = MODEL.get_learned_conditioning(prompts)
+
+                        # encode (scaled latent)
+                        z_enc = SAMPLER.stochastic_encode(img_latent, torch.tensor([t_enc]*batch).to(DEVICE))
+                        # decode it
+                        samples = SAMPLER.decode(z_enc, c, t_enc, unconditional_guidance_scale=SCALE,
+                                                 unconditional_conditioning=uc,)
+
+                        x_samples = MODEL.decode_first_stage(samples)
+                        x_samples = torch.clamp((x_samples + 1.0) / 2.0, min=0.0, max=1.0)
+
+                        for x_sample in x_samples:
+                            x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
+                            img = Image.fromarray(x_sample.astype(np.uint8))
+                            img = put_watermark(img, WM_ENCODER)
+                            results.append(base64.encodebytes(savePNG(img)).decode('utf-8'))
+
+                toc = time.time()
+
+    print(f"Your samples are ready\n"
+          f" \nEnjoy.")
+    return results
+
+
+
 
 ### Stable Dreamer Server code ###
 
@@ -309,7 +411,9 @@ def handle_dreamPromptRequest(request):
     return {'prompt': j['prompt'], 'results': results}
 
 def handle_dreamImageRequest(request):
-    return request
+    j = json.loads(request)
+    results = diffuseFromImage(j['prompt'], j['image'], j['options'])
+    return {'prompt': j['prompt'], 'results': results}
 
 def handleRequest(request : bytes):
     print("handling request")
