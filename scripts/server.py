@@ -208,8 +208,7 @@ def diffuse(prompt, options, inputImageURI=None):
 
 #    ## image2image
 def loadPNG(b64data : bytes) -> Image:
-    with io.BytesIO(initial_bytes=base64.decodebytes(b64data)) as input:
-        return Image.open(input)
+    return Image.open(io.BytesIO(initial_bytes=base64.decodebytes(b64data)))
 
 def load_img(imageURI):
     if not imageURI.startswith("data:image/png;base64,"):
