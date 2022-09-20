@@ -340,7 +340,7 @@ def shutdown():
         CONNECTION = None
 
     if SOCKET is not None:
-        # SOCKET.shutdown()
+        SOCKET.shutdown(socket.SHUT_RDWR)
         SOCKET.close()
         SOCKET = None
 
