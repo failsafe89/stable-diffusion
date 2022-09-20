@@ -451,6 +451,7 @@ def sendResponse(response):
 
 if __name__ == '__main__':
     SOCKET = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    SOCKET.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # allow reuse of already bound socket
     SOCKET.bind(('0.0.0.0', PORT))
 
     atexit.register(shutdown)
