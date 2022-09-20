@@ -259,10 +259,11 @@ def diffuseFromImage(prompt, inputImageURI, options):
     init_image = repeat(init_image, '1 ... -> b ...', b=batch)
     img_latent = MODEL.get_first_stage_encoding(MODEL.encode_first_stage(init_image))  # move to latent space
 
-    DDIM_SAMPLER.make_schedule(ddim_num_steps=ddim_steps, ddim_eta=DDIM_ETA, verbose=False)
+    # DDIM_SAMPLER.make_schedule(ddim_num_steps=ddim_steps, ddim_eta=DDIM_ETA, verbose=False)
 
     assert 0. <= strength <= 1., 'can only work with strength in [0.0, 1.0]'
-    t_enc = int(strength * ddim_steps)
+    # t_enc = int(strength * ddim_steps)
+    t_enc = ddim_steps
     print(f"target t_enc is {t_enc} steps")
 
     results = []
@@ -284,8 +285,18 @@ def diffuseFromImage(prompt, inputImageURI, options):
                         # encode (scaled latent)
                         z_enc = DDIM_SAMPLER.stochastic_encode(img_latent, torch.tensor([t_enc]*batch).to(DEVICE))
                         # decode it
-                        samples = DDIM_SAMPLER.decode(z_enc, c, t_enc, unconditional_guidance_scale=SCALE,
-                                                 unconditional_conditioning=uc,)
+                        # samples = DDIM_SAMPLER.decode(z_enc, c, t_enc, unconditional_guidance_scale=SCALE,
+                        #                          unconditional_conditioning=uc,)
+                        shape = [C, height // F, width // F]
+                        samples, _ = PLMS_SAMPLER.sample(S=ddim_steps,
+                                                         conditioning=c,
+                                                         batch_size=batch,
+                                                         shape=shape,
+                                                         verbose=False,
+                                                         unconditional_guidance_scale=SCALE,
+                                                         unconditional_conditioning=uc,
+                                                         eta=DDIM_ETA,
+                                                         x_T=z_enc)
 
                         x_samples = MODEL.decode_first_stage(samples)
                         x_samples = torch.clamp((x_samples + 1.0) / 2.0, min=0.0, max=1.0)
