@@ -335,7 +335,7 @@ def shutdown():
     print("shutting down cleanly")
 
     if CONNECTION is not None:
-        CONNECTION.shutdown()
+        CONNECTION.shutdown(socket.SHUT_RDWR)
         CONNECTION.close()
         CONNECTION = None
 
