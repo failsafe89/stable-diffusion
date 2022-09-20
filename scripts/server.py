@@ -262,7 +262,7 @@ def diffuseFromImage(prompt, inputImageURI, options):
     DDIM_SAMPLER.make_schedule(ddim_num_steps=ddim_steps, ddim_eta=DDIM_ETA, verbose=False)
 
     assert 0. <= strength <= 1., 'can only work with strength in [0.0, 1.0]'
-    t_enc = int(strength * ddim_steps)
+    t_enc = ddim_steps # int(strength * ddim_steps)
     print(f"target t_enc is {t_enc} steps")
 
     results = []
